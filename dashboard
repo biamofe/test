@@ -1,0 +1,180 @@
+from dash import Dash, html, dcc, Input, Output, callback
+import pandas as pd
+import plotly.express as px
+
+
+
+
+def dataset_full_view():
+    dataset = df.groupby(['rule_type', 'severity_type']).agg({'Esito_Regola': 'count'}).reset_index()
+    dataset = dataset.rename(columns={'Esito_Regola': 'KO'})
+    return dataset
+
+
+def create_dataset(df, Type, Status, Asset):
+    a=1
+    return df
+
+
+
+df = pd.read_csv('/Users/federico/Desktop/VSC/set_dati/datamart.csv')
+
+
+# PREPARAZIONE DEL DATASET #
+
+#Sostituisco i valori '_others_' con 'other type' e 'other status' per semplificare l'esperienza con i filtri
+df['asset_type'][df['asset_type'] == '_others_'] = 'other type'
+df['asset_status'][df['asset_status'] == '_others_'] = 'other status'
+
+#Nella colonna severity_type, rimuovo il carattere '_' e metto tutto in maiuscolo
+df['severity_type'] = df['severity_type'].str.upper()
+df['severity_type'] = df['severity_type'].str.replace('_', '')
+df['severity_type'][df['severity_type'] == 'INFORMATION'] = 'INFO'
+
+df['Esito_Regola'] = 'KO'
+
+#faccio un taglio di perimetro per lavorare solo sulle colonne di cui ho bisogno, selezione due colonne di df
+
+
+
+
+
+# Il primo filtro deve essere sull'asset type
+# Il secondo filtro deve essere sull'asset status
+# Il terzo filtro deve essere sull'asset selection
+
+
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+
+
+option_type = df['asset_type'].unique()
+option_status = df['asset_status'].unique()
+option_asset = df['confluence_page_title'].unique()
+
+app = Dash(__name__, external_stylesheets=external_stylesheets)
+
+app.layout = html.Div([
+                html.H1('Dashboard DQ'),
+                html.Div([
+                    html.Div([
+                        dcc.Dropdown(
+                            id='filtro-asset-type',
+                            options=[{'label': i, 'value': i} for i in option_type],
+                            placeholder='Seleziona la tipologia di asset',
+                            value='Type',
+                            )
+                        ],
+                        style={'width': '48%', 'display': 'inline-block'}),
+                    html.Div([
+                        dcc.Dropdown(
+                            id='filtro-asset-status',
+                            options=[{'label': i, 'value': i} for i in option_status],
+                            placeholder='Seleziona lo stato dell asset',
+                            value='Status'
+                            )
+                        ],
+                        style={'width': '48%', 'display': 'inline-block'}),
+                    html.Div([
+                        dcc.Dropdown(
+                            id='filtro-asset-selection',
+                            options=[{'label': i, 'value': i} for i in option_asset],
+                            placeholder='Seleziona un asset',
+                            value='Asset'
+                            )
+                        ],
+                        style={'width': '48%', 'display': 'inline-block'}),             
+                        ]),
+                html.Div([
+                    html.Div([
+                        dcc.Graph(id='grafico-1')
+                        ], style = {'width': '48%', 'display': 'inline-block', 'padding': '0 20'}),
+                    html.Div([
+                        dcc.Graph(id='grafico-2')
+                        ], style = {'width': '48%', 'display': 'inline-block', 'padding': '0 20'}),
+                    ]) 
+                    ])
+
+
+# Il callback viene generato sempre a partire da un'azione. Io ho una situazione in cui devo visualizzare lo stato 'all' di default. Non mi è quindi possibile andare ad agire immediatamente con il callback.
+# Dovrò quindi andare a creare una funzione che mi permetta di visualizzare lo stato 'all' di default. Questa funzione dovrà essere richiamata all'interno del callback.
+
+# Lo stato 'all' si verifica quando nessun dei filtri è selezionato
+
+
+
+
+
+
+
+
+
+@app.callback(
+    Output('filtro-asset-selection', 'options'),
+    Input('filtro-asset-type', 'value'),
+    Input('filtro-asset-status', 'value'))
+def update_asset_selection(Asset_type, Asset_status):
+    dff = df[(df['asset_type'] == Asset_type) & (df['asset_status'] == Asset_status)]
+    option_asset = dff['confluence_page_title'].unique()
+    return [{'label': i, 'value': i} for i in option_asset]
+
+
+@app.callback(
+    Output('grafico-1', 'figure'),
+    Input('filtro-asset-type', 'value'),
+    Input('filtro-asset-status', 'value'),
+    Input('filtro-asset-selection', 'value'))
+def update_grafico_1(Type, Status, Asset):
+
+    #dataset = crea_dataset(df, Type, Status, Asset)
+    dataset = dataset_full_view()
+    # elimina tutte le righe del dataset che hanno severity_type = INFORMATION
+
+
+
+    # se il dataset è vuoto, popolo la colonna 'severity' con i valori di severity presenti nel dataset originale, in modo tale da poter visualizzare il grafico con il labeling corretto
+
+
+
+    # La mancanza di severity in una tabella potrebbe provocare l'assenza della label in fase di visualizzazione grafica. Per evitare che il problema si verifichi,
+    # ho aggiunto manualmente le casistiche di severity mancanti nel dataset. Il dataset di riferimento è stato aumentato con delle righe fake che consentono di andare
+    # a creare le casistiche di severity mancanti. Lo stesso ragionamento è stato utilizzato per il Type di regola. Tutti gli elementi fake sono stati classificati come OK
+    # in modo tale da non influenzare il conteggio delle regole in stato KO e di conseguenza la visualizzaione grafica.
+
+    # primo sort per far si che le severity fake siano distribuite sulla coda del dataset, ovvero sui valori fake
+
+
+
+
+    # secondo sort per far si che tutto venga riordinato correttamente con le nuove aggiunte
+
+
+
+    # creo un dizionario che mi permette di associare ad ogni severity un colore diverso
+
+    color_dict = {
+        'WARNING': '#E0B0FF',
+        'ERROR': '#DA70D6',
+        'INFO': '#CCCCFF'
+    }
+
+    # creo il grafico a barre utilizzando il dataset prodotto dalla funzione crea_dataset(), il grafico sarà organizzato mostrando sulla dimensione X le tipologie di
+    # regole che sono state usate per la DQ, sulla dimensione Y il numero di regole in stato KO e le barre saranno stratificate per severity (ERROR, WARNING, INFO).
+    # La stratificazione avviene in stack (una barra sopra l'altra)
+
+    fig = px.bar(dataset, x='rule_type', y='KO', color='severity_type', barmode='stack', color_discrete_map=color_dict)
+    fig.update_xaxes(title_text='Control Type')
+    fig.update_yaxes(title_text='Number of KO rules', tickmode='linear', tick0=0, dtick=1)
+    return fig
+
+
+
+
+
+
+
+
+
+
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
